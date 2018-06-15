@@ -29,6 +29,7 @@ class myFTPClient {
 
     this._socket.on("data", data => {
       console.log(data.toString());
+      this._prompt();
     });
 
     this._socket.on("end", () => {

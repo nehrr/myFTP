@@ -11,47 +11,54 @@ class myFTPServer {
   start() {
     this._server = net.createServer(socket => {
       log("socket connected");
+      socket.user = {};
       socket.setEncoding("ascii");
 
       socket.on("data", data => {
-        data = data.split(" ");
+        const [cmd, ...params] = data.split(" ");
 
-        if (isAllowedCommand(data[0])) {
-          switch (data[0]) {
+        if (!isAllowedCommand(cmd)) {
+          socket.write("ko");
+        } else {
+          let ret;
+          switch (cmd) {
             case "USER":
-              if (this._user(data[1])) {
-                this._user = data[1];
-                console.log(this._user);
+              if (params.length !== 1) {
+                ret = "must specify user name";
+              } else {
+                ret = this._user(socket, params[0]);
+                break;
               }
-              return;
+              break;
 
             case "PASS":
-              this._password(this._user, data[1]);
-              return;
+              ret = this._password(socket, params[0]);
+              break;
 
             case "LIST":
-              this._list(user, data[1]);
-              return;
+              console.log(this._list(socket, params[0]));
+              // ret = this._list(socket, params[0]);
+              break;
 
             case "PWD":
               this._pwd();
-              return;
+              break;
 
             case "CWD":
               this._cwd();
-              return;
+              break;
 
             case "RETR":
               this._retr();
-              return;
+              break;
 
             case "STOR":
               this._stor();
-              return;
+              break;
 
             case "HELP":
-              this._help();
-              return;
+              ret = this._help();
+              break;
 
             case "QUIT":
             // socket.destroy();
@@ -59,8 +66,7 @@ class myFTPServer {
             default:
               break;
           }
-        } else {
-          socket.write("ko");
+          socket.write(ret);
         }
       });
 
@@ -78,32 +84,41 @@ class myFTPServer {
     });
   }
 
-  _user(username) {
-    for (let item of db) {
-      if (item.user == username) {
-        console.log("ok");
-        return true;
-      }
+  _user(socket, username) {
+    if (db.find(item => item.user === username)) {
+      socket.user = { username, isConnected: false };
+      return "OK";
+    } else {
+      return "KO";
     }
-    console.log("no");
-    return false;
   }
 
-  _password(user, password) {
-    for (let item of db) {
-      if (item.user == user) {
-        for (let pw of db) {
-          if (pw.password == password) {
-            console.log("ok");
-            return true;
-          }
-        }
-        console.log("no");
-        return false;
+  _password(socket, password) {
+    if (!socket.user.username) {
+      return "KO";
+    } else {
+      if (
+        db.find(
+          item =>
+            item.user === socket.user.username && item.password === password
+        )
+      ) {
+        socket.user.isConnected = true;
+        // if (fs.stat(`./share/${socket.user.username}/`) == false) {
+        //   console.log(socket.user.username);
+        //   fs.mkdir(`./share/${socket.user.username}/`);
+        // }
+        socket.user.root = socket.user.username;
+
+        return "OK";
+      } else {
+        return "KO";
       }
+      //check user/pw
+      //isConnected
+      //directory exists ? > create if not
+      //init root === cwd
     }
-    console.log("no");
-    return false;
   }
 
   _cwd() {}
@@ -114,21 +129,30 @@ class myFTPServer {
 
   _stor() {}
 
-  _list(user, directory = null) {
-    if (fs.existsSync(`./share/${user}/${directory}/`)) {
-      fs.readdir(`./share/${user}/${directory}/`, (err, data) => {
-        if (err) throw err;
-        console.log(data);
-      });
+  _list(socket, directory = null) {
+    if (!socket.user.isConnected) {
+      return "please log in";
     } else {
-      fs.readdir(`./share/${user}/`, (err, data) => {
-        if (err) throw err;
-        console.log(data);
-      });
+      if (fs.existsSync(`./share/${socket.user.username}/${directory}/`)) {
+        fs.readdir(
+          `./share/${socket.user.username}/${directory}/`,
+          (err, data) => {
+            if (err) return "Error";
+            return data.toString();
+          }
+        );
+      } else {
+        fs.readdir(`./share/${socket.user.username}/`, (err, data) => {
+          if (err) throw err;
+          return data.toString();
+        });
+      }
     }
   }
 
-  _help() {}
+  _help() {
+    return "USER: input username\nPASS: input password\nLIST: show list of files in directory (if logged)\nPWD: show directory (if logged)\nCWD: change working directory (if logged)\nRETR: retrieve file (if logged)\nSTOR: store file (if logged)\nHELP: get all available commands\nQUIT: close connection";
+  }
 }
 
 const args = argv();
