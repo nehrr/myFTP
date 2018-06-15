@@ -152,7 +152,13 @@ class myFTPServer {
     if (!socket.user.isConnected) {
       return "please log in";
     } else {
-      return fs.readdirSync(socket.user.cwd).join(", ");
+      let list = [];
+      fs.readdirSync(socket.user.cwd).forEach(file => {
+        const pathname = path.join(socket.user.cwd, file);
+        let status = fs.statSync(pathname);
+        list.push(status.isDirectory() ? `${file}/` : file);
+      });
+      return list.join(", ");
     }
   }
 
