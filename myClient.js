@@ -1,4 +1,6 @@
 const net = require("net");
+const fs = require("fs");
+const db = require("./db.json");
 
 const client = net.createConnection({ port: 4242 }, () => {
   // 'connect' listener
@@ -8,7 +10,6 @@ const client = net.createConnection({ port: 4242 }, () => {
 
 client.on("data", data => {
   console.log(data.toString());
-  client.end();
 });
 
 client.on("end", () => {

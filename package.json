@@ -1,0 +1,30 @@
+{
+  "name": "myftp",
+  "version": "1.0.0",
+  "description": "",
+  "main": "myServer.js",
+  "dependencies": {
+    "colors": "^1.3.0",
+    "moment": "^2.22.2"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.0.0-beta.51",
+    "@babel/node": "^7.0.0-beta.51",
+    "@babel/preset-env": "^7.0.0-beta.51",
+    "nodemon": "^1.17.5"
+  },
+  "scripts": {
+    "server": "npx nodemon myServer.js --exec babel-node",
+    "client": "npx nodemon myClient.js --exec babel-node"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nehrr/myFTP.git"
+  },
+  "author": "nehrr",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/nehrr/myFTP/issues"
+  },
+  "homepage": "https://github.com/nehrr/myFTP#readme"
+}

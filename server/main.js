@@ -1,4 +1,3 @@
-// const net = require("net");
 const fs = require("fs");
 const db = require("./db.json");
 
@@ -40,7 +39,7 @@ function list(user, directory) {
 
 function get(filename) {
   //returns file
-  fs.copyFile(`./share/${user}/${filename}`, `${filename}`, err => {
+  fs.copyFile(`./share/${user}/${filename}`, `~/Desktop/${filename}`, err => {
     if (err) throw err;
     console.log("file was copied");
   });
@@ -63,22 +62,3 @@ console.log(checkPw("hawke", "nope"));
 list("hawke", "share");
 // get("hello.txt");
 // put("boop.txt");
-
-//
-// const server = net.createServer(c => {
-//   // 'connection' listener
-//   console.log("client connected");
-//   c.on("end", () => {
-//     console.log("client disconnected");
-//   });
-//   c.write("Beep boop I'm a roboto server!\r\n");
-//   c.pipe(c);
-// });
-//
-// server.on("error", err => {
-//   throw err;
-// });
-//
-// server.listen(4242, () => {
-//   console.log("server bound");
-// });
