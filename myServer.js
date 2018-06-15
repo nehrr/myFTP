@@ -18,7 +18,7 @@ class myFTPServer {
         const [cmd, ...params] = data.split(" ");
 
         if (!isAllowedCommand(cmd)) {
-          socket.write("ko");
+          socket.write("KO");
         } else {
           let ret;
           switch (cmd) {
@@ -36,12 +36,12 @@ class myFTPServer {
               break;
 
             case "LIST":
-              console.log(this._list(socket, params[0]));
+              ret = this._list(socket, params[0]);
               // ret = this._list(socket, params[0]);
               break;
 
             case "PWD":
-              this._pwd();
+              ret = this._pwd(socket);
               break;
 
             case "CWD":
@@ -104,26 +104,23 @@ class myFTPServer {
         )
       ) {
         socket.user.isConnected = true;
-        // if (fs.stat(`./share/${socket.user.username}/`) == false) {
-        //   console.log(socket.user.username);
-        //   fs.mkdir(`./share/${socket.user.username}/`);
-        // }
+        if (!fs.existsSync(`./share/${socket.user.username}/`)) {
+          fs.mkdir(`./share/${socket.user.username}/`);
+        }
         socket.user.root = socket.user.username;
-
-        return "OK";
-      } else {
-        return "KO";
       }
-      //check user/pw
-      //isConnected
-      //directory exists ? > create if not
-      //init root === cwd
+      return "OK";
     }
   }
 
   _cwd() {}
 
-  _pwd() {}
+  _pwd(socket) {
+    if (socket.user.isConnected) {
+      return fs.readdirSync(`./share/${socket.user.root}/`);
+    }
+    //print working directory
+  }
 
   _retr() {}
 
@@ -151,7 +148,7 @@ class myFTPServer {
   }
 
   _help() {
-    return "USER: input username\nPASS: input password\nLIST: show list of files in directory (if logged)\nPWD: show directory (if logged)\nCWD: change working directory (if logged)\nRETR: retrieve file (if logged)\nSTOR: store file (if logged)\nHELP: get all available commands\nQUIT: close connection";
+    return "USER: input username\nPASS: input password\nLIST: show list of files in directory (if logged)\nPWD: print working directory (if logged)\nCWD: change working directory (if logged)\nRETR: retrieve file (if logged)\nSTOR: store file (if logged)\nHELP: get all available commands\nQUIT: close connection";
   }
 }
 

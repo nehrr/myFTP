@@ -17,6 +17,7 @@ class myFTPClient {
     });
 
     rl.on("line", input => {
+      rl.close();
       this._socket.write(input);
     });
   }
