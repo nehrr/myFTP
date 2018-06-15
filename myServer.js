@@ -1,7 +1,11 @@
 import net from "net";
 import fs from "fs";
+import path from "path";
+
 import { log, isAllowedCommand, argv } from "./utils";
 import db from "./db.json";
+
+const ROOT_FTP_DIRECTORY = "./share";
 
 class myFTPServer {
   constructor(port) {
@@ -104,10 +108,12 @@ class myFTPServer {
         )
       ) {
         socket.user.isConnected = true;
-        if (!fs.existsSync(`./share/${socket.user.username}/`)) {
-          fs.mkdir(`./share/${socket.user.username}/`);
+
+        const userpath = path.join(ROOT_FTP_DIRECTORY, socket.user.username);
+        if (!fs.existsSync(userpath)) {
+          fs.mkdir(userpath);
         }
-        socket.user.root = socket.user.username;
+        socket.user.root = socket.user.cwd = userpath;
       }
       return "OK";
     }
