@@ -25,57 +25,20 @@ class myFTPServer {
           socket.write("KO");
         } else {
           let ret;
-          switch (cmd) {
-            case "USER":
-              if (params.length !== 1) {
-                ret = "must specify user name";
-              } else {
-                ret = this._user(socket, params[0]);
-                break;
-              }
-              break;
+          const method = this[`_${cmd.toLowerCase()}`];
 
-            case "PASS":
-              ret = this._password(socket, params[0]);
-              break;
-
-            case "LIST":
-              ret = this._list(socket, params[0]);
-              break;
-
-            case "PWD":
-              ret = this._pwd(socket);
-              break;
-
-            case "CWD":
-              if (params.length !== 1) {
-                ret = "must specify directory name";
-              } else {
-                ret = this._cwd(socket, params[0]);
-                break;
-              }
-              break;
-
-            case "RETR":
-              this._retr();
-              break;
-
-            case "STOR":
-              this._stor();
-              break;
-
-            case "HELP":
-              ret = this._help();
-              break;
-
-            case "QUIT":
-              this._quit(socket);
-              return;
-
-            default:
-              break;
+          if (["USER", "PASS", "HELP", "QUIT"].includes(cmd)) {
+            ret = method(socket, params);
+          } else {
+            if (!socket.user.isConnected) {
+              ret = "please use USER and PASS first";
+              ret = method(socket, params);
+            }
           }
-          socket.write(ret);
+
+          if (ret !== -1) {
+            socket.write(ret);
+          }
         }
       });
 
@@ -124,7 +87,25 @@ class myFTPServer {
     }
   }
 
-  _cwd(socket, directory) {
+  _cwd(socket, pathname) {
+    if (!socket.user.isConnected) {
+      return "please log in";
+    } else {
+      const newpath = path.join(socket.user.cwd, pathname);
+
+      if (newpath.substr(0, socket.user.root.length) !== socket.user.root) {
+        return "KO";
+      } else {
+        if (!fs.existsSync(newpath)) {
+          return "KO";
+        }
+        socket.user.cwd = newpath;
+        return "OK";
+      }
+    }
+  }
+
+  _make(socket, directory) {
     if (!socket.user.isConnected) {
       return "please log in";
     } else {
