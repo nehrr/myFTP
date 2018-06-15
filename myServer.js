@@ -1,4 +1,5 @@
 import net from "net";
+import fs from "fs";
 import { log, isAllowedCommand, argv } from "./utils";
 import db from "./db.json";
 
@@ -13,40 +14,51 @@ class myFTPServer {
       socket.setEncoding("ascii");
 
       socket.on("data", data => {
-        if (isAllowedCommand(data)) {
-          console.log(data);
-          switch (data) {
+        data = data.split(" ");
+
+        if (isAllowedCommand(data[0])) {
+          switch (data[0]) {
             case "USER":
-              this._user();
+              if (this._user(data[1])) {
+                this._user = data[1];
+                console.log(this._user);
+              }
+              return;
 
             case "PASS":
-              this._password();
+              this._password(this._user, data[1]);
+              return;
 
             case "LIST":
-              this._list();
+              this._list(user, data[1]);
+              return;
 
             case "PWD":
               this._pwd();
+              return;
 
             case "CWD":
               this._cwd();
+              return;
 
             case "RETR":
               this._retr();
+              return;
 
             case "STOR":
               this._stor();
+              return;
 
             case "HELP":
               this._help();
+              return;
 
             case "QUIT":
-              this._quit();
+            // socket.destroy();
 
             default:
               break;
           }
-          socket.write("ok");
         } else {
           socket.write("ko");
         }
@@ -69,13 +81,30 @@ class myFTPServer {
   _user(username) {
     for (let item of db) {
       if (item.user == username) {
+        console.log("ok");
         return true;
       }
     }
+    console.log("no");
     return false;
   }
 
-  _password() {}
+  _password(user, password) {
+    for (let item of db) {
+      if (item.user == user) {
+        for (let pw of db) {
+          if (pw.password == password) {
+            console.log("ok");
+            return true;
+          }
+        }
+        console.log("no");
+        return false;
+      }
+    }
+    console.log("no");
+    return false;
+  }
 
   _cwd() {}
 
@@ -85,11 +114,21 @@ class myFTPServer {
 
   _stor() {}
 
-  _list() {}
+  _list(user, directory = null) {
+    if (fs.existsSync(`./share/${user}/${directory}/`)) {
+      fs.readdir(`./share/${user}/${directory}/`, (err, data) => {
+        if (err) throw err;
+        console.log(data);
+      });
+    } else {
+      fs.readdir(`./share/${user}/`, (err, data) => {
+        if (err) throw err;
+        console.log(data);
+      });
+    }
+  }
 
   _help() {}
-
-  _quit() {}
 }
 
 const args = argv();
