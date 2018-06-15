@@ -41,7 +41,6 @@ class myFTPServer {
 
             case "LIST":
               ret = this._list(socket, params[0]);
-              // ret = this._list(socket, params[0]);
               break;
 
             case "PWD":
@@ -49,7 +48,12 @@ class myFTPServer {
               break;
 
             case "CWD":
-              this._cwd();
+              if (params.length !== 1) {
+                ret = "must specify directory name";
+              } else {
+                ret = this._cwd(socket, params[0]);
+                break;
+              }
               break;
 
             case "RETR":
@@ -65,7 +69,8 @@ class myFTPServer {
               break;
 
             case "QUIT":
-            // socket.destroy();
+              this._quit(socket);
+              return;
 
             default:
               break;
@@ -119,42 +124,52 @@ class myFTPServer {
     }
   }
 
-  _cwd() {}
+  _cwd(socket, directory) {
+    if (!socket.user.isConnected) {
+      return "please log in";
+    } else {
+      const userpath = path.join(
+        ROOT_FTP_DIRECTORY,
+        socket.user.username,
+        directory
+      );
+
+      socket.user.cwd = userpath;
+      fs.mkdir(userpath);
+      return "OK";
+    }
+  }
 
   _pwd(socket) {
-    if (socket.user.isConnected) {
-      return fs.readdirSync(`./share/${socket.user.root}/`);
-    }
-    //print working directory
+    return `/${socket.user.cwd}`;
   }
 
   _retr() {}
 
   _stor() {}
 
-  _list(socket, directory = null) {
+  _list(socket) {
     if (!socket.user.isConnected) {
       return "please log in";
     } else {
-      if (fs.existsSync(`./share/${socket.user.username}/${directory}/`)) {
-        fs.readdir(
-          `./share/${socket.user.username}/${directory}/`,
-          (err, data) => {
-            if (err) return "Error";
-            return data.toString();
-          }
-        );
-      } else {
-        fs.readdir(`./share/${socket.user.username}/`, (err, data) => {
-          if (err) throw err;
-          return data.toString();
-        });
-      }
+      return fs.readdirSync(socket.user.cwd).join(", ");
     }
   }
 
   _help() {
-    return "USER: input username\nPASS: input password\nLIST: show list of files in directory (if logged)\nPWD: print working directory (if logged)\nCWD: change working directory (if logged)\nRETR: retrieve file (if logged)\nSTOR: store file (if logged)\nHELP: get all available commands\nQUIT: close connection";
+    return `USER: input username
+    PASS: input password
+    LIST: show list of files in directory (if logged)
+    PWD: print working directory (if logged)
+    CWD: change working directory (if logged)
+    RETR: retrieve file (if logged)
+    STOR: store file (if logged)
+    HELP: get all available commands
+    QUIT: close connection`;
+  }
+
+  _quit(socket) {
+    socket.end();
   }
 }
 
