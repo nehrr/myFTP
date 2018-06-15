@@ -1,17 +1,48 @@
-const net = require("net");
-const fs = require("fs");
-const db = require("./db.json");
+import net from "net";
+import fs from "fs";
+import readline from "readline";
+import { log, argv } from "./utils";
 
-const client = net.createConnection({ port: 4242 }, () => {
-  // 'connect' listener
-  console.log("connected to server!");
-  client.write("Beep boop, hello you!\r\n");
-});
+class myFTPClient {
+  constructor(host, port) {
+    this._host = host;
+    this._port = port;
+  }
 
-client.on("data", data => {
-  console.log(data.toString());
-});
+  _prompt() {
+    log(">>", "white", false);
 
-client.on("end", () => {
-  console.log("disconnected from server");
-});
+    const rl = readline.createInterface({
+      input: process.stdin
+    });
+
+    rl.on("line", input => {
+      this._socket.write(input);
+    });
+  }
+
+  connect() {
+    this._socket = net.createConnection({ port: this._port }, () => {
+      log("connected to server!", "cyan");
+      this._prompt();
+    });
+
+    this._socket.on("data", data => {
+      console.log(data.toString());
+    });
+
+    this._socket.on("end", () => {
+      log("disconnected from server", "cyan");
+    });
+  }
+}
+
+const args = argv();
+if (args.length !== 2) {
+  log("usage: client host port", "red");
+  process.exit(-1);
+}
+
+let [host, port] = args;
+const client = new myFTPClient(host, port);
+client.connect();

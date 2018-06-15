@@ -1,5 +1,5 @@
-const moment = require("moment");
-const colors = require("colors/safe");
+import moment from "moment";
+import colors from "colors/safe";
 
 export function argv() {
   return process.argv.slice(2);
@@ -33,5 +33,3 @@ export function isAllowedCommand(cmd) {
   //return index, if -1 means it does not exist
   return cmds.indexOf(cmd) !== -1;
 }
-
-log("poop", "magenta", true);
