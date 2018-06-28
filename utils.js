@@ -34,6 +34,11 @@ export function isAllowedCommand(cmd) {
   return cmds.indexOf(cmd) !== -1;
 }
 
+export function sendLog(socket, msg) {
+  log(msg, "green");
+  socket.write(`${msg}\r\n`);
+}
+
 /* old
 
 function checkUser(username) {

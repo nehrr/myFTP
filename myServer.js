@@ -2,39 +2,67 @@ import net from "net";
 import fs from "fs";
 import path from "path";
 
-import { log, isAllowedCommand, argv } from "./utils";
+import { log, isAllowedCommand, argv, sendLog } from "./utils";
 import db from "./db.json";
 
 const ROOT_FTP_DIRECTORY = "./share";
 
-class myFTPServer {
-  constructor(port) {
-    this._port = port;
-  }
+class Server {
+  create(port, callback) {
+    let server = net.createServer(callback);
 
-  start() {
-    this._server = net.createServer(socket => {
-      log("socket connected");
-      socket.user = {};
+    server.listen(port, () => {
+      log(`server bound on port: [${port}]`);
+    });
+
+    server.on("error", err => {
+      throw err;
+    });
+
+    server.on("close", () => {
+      log("server disconnected", "red");
+    });
+
+    return server;
+  }
+}
+
+class myFTPServer extends Server {
+  start(port) {
+    super.create(port, socket => {
+      log(`socket connected`, "cyan");
+
+      socket.session = {};
+      socket.name = socket.remoteAddress + ":" + socket.remotePort;
+
       socket.setEncoding("ascii");
 
+      //identification of server
+      sendLog(socket, "220 willkommen in server");
+
       socket.on("data", data => {
+        data = data.trim();
+        log("<<<" + data, "yellow");
+
         const [cmd, ...params] = data.split(" ");
 
-        if (!isAllowedCommand(cmd)) {
-          socket.write("KO");
-        } else {
-          let ret;
-          const method = this[`_${cmd.toLowerCase()}`];
-          let isAllowed = ["USER", "PASS", "HELP", "QUIT"].includes(cmd);
+        let ret = "";
 
-          if (!isAllowed && !socket.user.isConnected) {
-            socket.write("please use USER and PASS first");
+        if (!isAllowedCommand(cmd)) {
+          sendLog(socket, "502 not implemented");
+        } else {
+          let cmdWithoutAuth = ["AUTH", "USER", "PASS", "HELP", "QUIT"];
+
+          let noAuth = cmdWithoutAuth.includes(cmd);
+
+          if (!noAuth && !socket.session.isConnected) {
+            sendLog(socket, "502 please use USER and PASS first");
           } else {
-            let ret = method(socket, ...params);
-            if (ret !== -1) {
-              socket.write(ret);
-            }
+            this[`_${cmd.toLowerCase()}`](socket, ...params);
+            // log(">>>" + ret, "green");
+            // if (ret !== 0) {
+            //   socket.write(`${ret}\r\n`);
+            // }
           }
         }
       });
@@ -43,45 +71,38 @@ class myFTPServer {
         log("socket disconnected", "red");
       });
     });
-
-    this._server.on("error", err => {
-      throw err;
-    });
-
-    this._server.listen(this._port, () => {
-      log("server listening");
-    });
   }
 
   _user(socket, username) {
     if (db.find(item => item.user === username)) {
-      socket.user = { username, isConnected: false };
-      return "OK";
+      socket.session = { username, isConnected: false };
+      sendLog(socket, "331 user name ok");
     } else {
-      return "KO";
+      sendLog(socket, "332 need account");
     }
   }
 
   _pass(socket, password) {
-    if (!socket.user.username) {
-      return "KO";
+    if (!socket.session.username) {
+      sendLog(socket, "530 not logged in");
     } else {
       if (
         db.find(
           item =>
-            item.user === socket.user.username && item.password === password
+            item.user === socket.session.username && item.password === password
         )
       ) {
-        socket.user.isConnected = true;
+        socket.session.isConnected = true;
 
-        const userpath = path.join(ROOT_FTP_DIRECTORY, socket.user.username);
+        const userpath = path.join(ROOT_FTP_DIRECTORY, socket.session.username);
         if (!fs.existsSync(userpath)) {
           fs.mkdir(userpath);
         }
-        socket.user.root = socket.user.cwd = userpath;
-        return "OK";
+        socket.session.root = socket.session.cwd = userpath;
+        sendLog(socket, "230 logged in");
+      } else {
+        sendLog(socket, "KO");
       }
-      return "KO";
     }
   }
 
@@ -90,15 +111,15 @@ class myFTPServer {
       return "KO";
     }
 
-    const newpath = path.join(socket.user.cwd, pathname);
+    const newpath = path.join(socket.session.cwd, pathname);
 
-    if (newpath.substr(0, socket.user.root.length) !== socket.user.root) {
+    if (newpath.substr(0, socket.session.root.length) !== socket.session.root) {
       return "KO";
     } else {
       if (!fs.existsSync(newpath)) {
         return "KO";
       }
-      socket.user.cwd = newpath;
+      socket.session.cwd = newpath;
       return "OK";
     }
   }
@@ -106,21 +127,21 @@ class myFTPServer {
   _make(socket, directory) {
     const userpath = path.join(
       ROOT_FTP_DIRECTORY,
-      socket.user.username,
+      socket.session.username,
       directory
     );
 
-    socket.user.cwd = userpath;
+    socket.session.cwd = userpath;
     fs.mkdir(userpath);
     return "OK";
   }
 
   _pwd(socket) {
-    return `/${socket.user.cwd}`;
+    sendLog(socket, `257 /${socket.session.cwd}`);
   }
 
   _retr(socket, filename) {
-    const pathname = path.join(socket.user.cwd, filename);
+    const pathname = path.join(socket.session.cwd, filename);
     let data = fs.readFileSync(pathname);
     return "OK";
   }
@@ -129,8 +150,8 @@ class myFTPServer {
 
   _list(socket) {
     let list = [];
-    fs.readdirSync(socket.user.cwd).forEach(file => {
-      const pathname = path.join(socket.user.cwd, file);
+    fs.readdirSync(socket.session.cwd).forEach(file => {
+      const pathname = path.join(socket.session.cwd, file);
       let status = fs.statSync(pathname);
       list.push(status.isDirectory() ? `${file}/` : file);
     });
@@ -162,6 +183,5 @@ if (args.length !== 1) {
 }
 
 const port = parseInt(args[0]);
-const server = new myFTPServer(port);
-
-server.start();
+const server = new myFTPServer();
+server.start(port);
