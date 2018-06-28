@@ -1,11 +1,15 @@
 import net from "net";
 import fs from "fs";
 import path from "path";
+import os from "os";
+import { exec } from "child_process";
+import { promisify } from "util";
 
 import { log, isAllowedCommand, argv, sendLog } from "./utils";
 import db from "./db.json";
 
-const ROOT_FTP_DIRECTORY = "./share";
+const ROOT_FTP_DIRECTORY = "share";
+const REAL_ROOT_FTP_DIRECTORY = path.join(__dirname, ROOT_FTP_DIRECTORY);
 
 class Server {
   create(port, callback) {
@@ -27,7 +31,12 @@ class Server {
   }
 }
 
-class myFTPServer extends Server {
+class MyFTPServer extends Server {
+  constructor(port) {
+    super();
+    this._dtp_port = 5000;
+  }
+
   start(port) {
     super.create(port, socket => {
       log(`socket connected`, "cyan");
@@ -73,6 +82,14 @@ class myFTPServer extends Server {
     });
   }
 
+  _runDTPServer(socket, port) {
+    super.create(this._dtp_port, client => {
+      log(`dtp connected on port: [${port}]`);
+      socket.session.dtp = client;
+    });
+    sendLog(socket, `227 entering passive mode (|||${this._dtp_port++}|)`);
+  }
+
   _user(socket, username) {
     if (db.find(item => item.user === username)) {
       socket.session = { username, isConnected: false };
@@ -84,7 +101,7 @@ class myFTPServer extends Server {
 
   _pass(socket, password) {
     if (!socket.session.username) {
-      sendLog(socket, "530 not logged in");
+      sendLog(socket, "302 use USER first");
     } else {
       if (
         db.find(
@@ -94,14 +111,19 @@ class myFTPServer extends Server {
       ) {
         socket.session.isConnected = true;
 
-        const userpath = path.join(ROOT_FTP_DIRECTORY, socket.session.username);
-        if (!fs.existsSync(userpath)) {
-          fs.mkdir(userpath);
+        socket.session.realpath = path.join(
+          REAL_ROOT_FTP_DIRECTORY,
+          socket.session.username
+        );
+        if (!fs.existsSync(socket.session.realpath)) {
+          fs.mkdir(socket.session.realpath);
         }
+
+        const userpath = path.join(ROOT_FTP_DIRECTORY, socket.session.username);
         socket.session.root = socket.session.cwd = userpath;
         sendLog(socket, "230 logged in");
       } else {
-        sendLog(socket, "KO");
+        sendLog(socket, "500 error");
       }
     }
   }
@@ -124,6 +146,10 @@ class myFTPServer extends Server {
     }
   }
 
+  _syst(socket) {
+    sendLog(socket, `215 ${os.platform()} ${os.arch()}`);
+  }
+
   _make(socket, directory) {
     const userpath = path.join(
       ROOT_FTP_DIRECTORY,
@@ -140,6 +166,16 @@ class myFTPServer extends Server {
     sendLog(socket, `257 /${socket.session.cwd}`);
   }
 
+  _type(socket, kind) {
+    const encoding = kind === "I" ? "binary" : "ascii";
+    socket.setEncoding(encoding);
+    sendLog(socket, `200 encoding is ${encoding}`);
+  }
+
+  _epsv(socket) {
+    this._runDTPServer(socket, this._dtp_port);
+  }
+
   _retr(socket, filename) {
     const pathname = path.join(socket.session.cwd, filename);
     let data = fs.readFileSync(pathname);
@@ -148,14 +184,20 @@ class myFTPServer extends Server {
 
   _stor() {}
 
-  _list(socket) {
-    let list = [];
-    fs.readdirSync(socket.session.cwd).forEach(file => {
-      const pathname = path.join(socket.session.cwd, file);
-      let status = fs.statSync(pathname);
-      list.push(status.isDirectory() ? `${file}/` : file);
-    });
-    return list.join(", ");
+  async _list(socket) {
+    //start
+    sendLog(socket, "150 transfer started");
+
+    //send data
+    let execute = promisify(exec);
+    let { stdout } = await execute(`ls -l ${socket.session.cwd}`);
+    log(stdout, "white");
+    socket.session.dtp.write(stdout);
+    socket.session.dtp.end();
+
+    //end
+    sendLog(socket, "226 transfer done");
+    // sendLog(socket, stdout);
   }
 
   _help() {
@@ -183,5 +225,5 @@ if (args.length !== 1) {
 }
 
 const port = parseInt(args[0]);
-const server = new myFTPServer();
+const server = new MyFTPServer();
 server.start(port);
