@@ -79,8 +79,9 @@ class myFTPServer {
           fs.mkdir(userpath);
         }
         socket.user.root = socket.user.cwd = userpath;
+        return "OK";
       }
-      return "OK";
+      return "KO";
     }
   }
 
@@ -121,7 +122,6 @@ class myFTPServer {
   _retr(socket, filename) {
     const pathname = path.join(socket.user.cwd, filename);
     let data = fs.readFileSync(pathname);
-    fs.writeFileSync(`/tmp/${filename}`, data);
     return "OK";
   }
 
