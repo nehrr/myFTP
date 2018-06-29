@@ -85,9 +85,13 @@ class MyFTPServer extends Server {
   _runDTPServer(socket, port) {
     super.create(this._dtp_port, client => {
       log(`dtp connected on port: [${port}]`);
+
+      client.setEncoding("utf8");
       socket.session.dtp = client;
+
+      //server is ready
+      socket.emit("nehrr::init");
     });
-    sendLog(socket, `227 entering passive mode (|||${this._dtp_port++}|)`);
   }
 
   _user(socket, username) {
@@ -130,19 +134,19 @@ class MyFTPServer extends Server {
 
   _cwd(socket, pathname) {
     if (pathname == null) {
-      return "KO";
+      sendLog(socket, "500 wrong directory");
     }
 
     const newpath = path.join(socket.session.cwd, pathname);
 
     if (newpath.substr(0, socket.session.root.length) !== socket.session.root) {
-      return "KO";
+      sendLog(socket, `250 ${newpath}`);
     } else {
       if (!fs.existsSync(newpath)) {
-        return "KO";
+        sendLog(socket, "500 wrong directory");
       }
       socket.session.cwd = newpath;
-      return "OK";
+      sendLog(socket, `250 ${socket.session.cwd}`);
     }
   }
 
@@ -174,6 +178,7 @@ class MyFTPServer extends Server {
 
   _epsv(socket) {
     this._runDTPServer(socket, this._dtp_port);
+    sendLog(socket, `227 entering passive mode (|||${this._dtp_port++}|)`);
   }
 
   _retr(socket, filename) {
@@ -184,20 +189,27 @@ class MyFTPServer extends Server {
 
   _stor() {}
 
-  async _list(socket) {
+  _list(socket) {
     //start
     sendLog(socket, "150 transfer started");
 
-    //send data
-    let execute = promisify(exec);
-    let { stdout } = await execute(`ls -l ${socket.session.cwd}`);
-    log(stdout, "white");
-    socket.session.dtp.write(stdout);
-    socket.session.dtp.end();
+    //client ready > send data
+    socket.on("nehrr::init", async () => {
+      let execute = promisify(exec);
+      let { stdout } = await execute(`ls -l ${socket.session.cwd}`);
+      log(stdout, "white");
+      socket.session.dtp.write(stdout);
+      socket.session.dtp.end();
 
-    //end
-    sendLog(socket, "226 transfer done");
-    // sendLog(socket, stdout);
+      //transfer done event
+      socket.emit("nehrr::finish");
+    });
+
+    //on finish
+    socket.on("nehrr::finish", () => {
+      //end
+      sendLog(socket, "226 transfer done");
+    });
   }
 
   _help() {
