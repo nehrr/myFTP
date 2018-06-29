@@ -124,7 +124,7 @@ class MyFTPServer extends Server {
         }
 
         const userpath = path.join(ROOT_FTP_DIRECTORY, socket.session.username);
-        socket.session.root = socket.session.cwd = userpath;
+        socket.session.root = socket.session.cwd = `/${userpath}`;
         sendLog(socket, "230 logged in");
       } else {
         sendLog(socket, "500 error");
@@ -137,16 +137,25 @@ class MyFTPServer extends Server {
       sendLog(socket, "500 wrong directory");
     }
 
-    const newpath = path.join(socket.session.cwd, pathname);
+    const directories =
+      pathname.split("/").length === 1 ? [socket.session.cwd] : [];
+    const newpath = path.join(...directories, pathname);
 
+    console.log(newpath);
+    console.log(socket.session.root);
     if (newpath.substr(0, socket.session.root.length) !== socket.session.root) {
-      sendLog(socket, `250 ${newpath}`);
+      sendLog(socket, `550 wrong path`);
     } else {
-      if (!fs.existsSync(newpath)) {
+      const realpath = path.join(REAL_ROOT_FTP_DIRECTORY, "..", newpath);
+      if (!fs.existsSync(realpath)) {
         sendLog(socket, "500 wrong directory");
       }
       socket.session.cwd = newpath;
-      sendLog(socket, `250 ${socket.session.cwd}`);
+      socket.session.realpath = path.join(
+        REAL_ROOT_FTP_DIRECTORY,
+        socket.session.cwd
+      );
+      sendLog(socket, `250 file path exists`);
     }
   }
 
@@ -167,7 +176,7 @@ class MyFTPServer extends Server {
   }
 
   _pwd(socket) {
-    sendLog(socket, `257 /${socket.session.cwd}`);
+    sendLog(socket, `257 ${socket.session.cwd}`);
   }
 
   _type(socket, kind) {
@@ -183,8 +192,31 @@ class MyFTPServer extends Server {
 
   _retr(socket, filename) {
     const pathname = path.join(socket.session.cwd, filename);
-    let data = fs.readFileSync(pathname);
-    return "OK";
+    if (
+      pathname.substr(0, socket.session.root.length) !== socket.session.root
+    ) {
+      sendLog(socket, "550 you do not have the rights to access this file");
+    } else {
+      const realpath = path.join(ROOT_FTP_DIRECTORY, "..", pathname);
+      if (!fs.existsSync(realpath)) {
+        sendLog(socket, "550 file does not exist");
+      } else {
+        sendLog(socket, "150 transfer started");
+        socket.on("nehrr::init", () => {
+          let data = fs.readFileSync(realpath);
+          socket.session.dtp.write(data);
+          socket.session.dtp.end();
+
+          socket.emit("nehrr::finish");
+        });
+
+        //on finish
+        socket.on("nehrr::finish", () => {
+          //end
+          sendLog(socket, "226 transfer done");
+        });
+      }
+    }
   }
 
   _stor() {}
@@ -196,7 +228,12 @@ class MyFTPServer extends Server {
     //client ready > send data
     socket.on("nehrr::init", async () => {
       let execute = promisify(exec);
-      let { stdout } = await execute(`ls -l ${socket.session.cwd}`);
+      const directory = path.join(
+        REAL_ROOT_FTP_DIRECTORY,
+        "..",
+        socket.session.cwd
+      );
+      let { stdout } = await execute(`ls -l ${directory}`);
       log(stdout, "white");
       socket.session.dtp.write(stdout);
       socket.session.dtp.end();
